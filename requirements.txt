@@ -1,0 +1,24 @@
+# Required and optional dependencies for Timechain Desktop Widget v21.0.12
+
+# Mandatory library for image processing
+Pillow>=9.0.0
+
+# Optional libraries for full functionality
+# - For video recording
+opencv-python>=4.5.0
+# - For faster screen capturing (especially video/GIF)
+mss>=6.0.0
+# - For numerical operations (used with video/image analysis)
+numpy>=1.20.0
+# - For global hotkey support
+pynput>=1.7.0
+# - For copying text to clipboard
+pyperclip>=1.8.0
+# - For dynamic QR code generation
+qrcode[pil]>=7.0
+# - For fetching data from public blockchain APIs
+requests>=2.25.0
+# - For multi-monitor support
+screeninfo>=0.6.0
+# - For audio feedback (optional feature)
+simpleaudio>=1.0.0
