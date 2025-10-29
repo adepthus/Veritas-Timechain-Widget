@@ -108,4 +108,8 @@ This was my protocol. The data remains. **Truth is in the timeline.**
 
 `URL;date/time;#@`
 
+---
+
+![Zrzut Timechain](Timechain_Captures/timechain_capture__920012_000000...cb4420251021_005559_677.png)
+
 **@adepthus**
