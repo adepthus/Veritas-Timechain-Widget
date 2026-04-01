@@ -37,6 +37,8 @@ import hashlib
 import json
 import base64
 import io
+import struct
+import tempfile
 try:
     import pikepdf
     from reportlab.pdfgen import canvas
@@ -60,6 +62,12 @@ import gc
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+# --- Veritas Engine (Thermodynamic Alignment Core) ---
+try:
+    import veritas_engine as ve
+except ImportError:
+    ve = None  # Fallback: engine functions used inline
+
 # --- GUI Library Imports (Tkinter) ---
 import tkinter as tk
 try:
@@ -69,12 +77,12 @@ except ImportError:
 from tkinter import filedialog, messagebox, colorchooser, font as tkfont, ttk
 
 # --- Metadata ---
-APP_VERSION = "21.3.1"
-APP_CODENAME = "Veritas Bridge + OTS + PSBT OP_RETURN"
+APP_VERSION = "21.4.0"
+APP_CODENAME = "Thermodynamic Alignment"
 CONFIG_FILENAME = "timechain_config_v15.json"
 
 # --- Veritas Protocol Visual Identity ---
-VERITAS_PROTOCOL_VERSION = "v10.3"
+VERITAS_PROTOCOL_VERSION = ve.VERITAS_PROTOCOL_VERSION if ve else "v10.3"
 VERITAS_COLORS = {
     "gold": "#F5A623",       # Truth / Prawda
     "deep_blue": "#1A2332",  # Timechain / Depth
@@ -187,7 +195,7 @@ except ImportError:
 
 
 # --- Global Constants & Helper Functions ---
-REQUESTS_TIMEOUT = 10
+REQUESTS_TIMEOUT = ve.REQUESTS_TIMEOUT_S if ve else 10
 
 def _is_windows() -> bool:
     return platform.system() == "Windows"
@@ -326,6 +334,18 @@ class DataManager:
         self.config = app.config_manager
         self._data_cache: Dict[str, Any] = {"blockheight": "Ładowanie...", "hash_full": "...", "hash_short": "..."}
         self._data_lock = threading.Lock()
+        self._transient: Dict[str, Any] = {}  # Thread-safe transient store for UI state
+        self._transient_lock = threading.Lock()
+
+    def set_transient(self, key: str, value: Any) -> None:
+        """Store transient UI state (e.g. latest_psbt_path). Thread-safe."""
+        with self._transient_lock:
+            self._transient[key] = value
+
+    def get_transient(self, key: str, default: Any = None) -> Any:
+        """Retrieve transient UI state. Thread-safe."""
+        with self._transient_lock:
+            return self._transient.get(key, default)
 
     def fetch_all_data(self) -> None:
         if not _OPTIONAL_DEPENDENCIES['requests'] and not self.config.get("use_custom_node"):
@@ -453,10 +473,24 @@ class TemplateEngine:
         replacements = {'@': self._get_swatch_internet_time(), '%blockheight%': str(data.get("blockheight", "...")), '%hash%': data.get("hash_full", "...") if cfg.get("display_full_hash") else data.get("hash_short", "..."), '%glyph%': self._generate_glyph(cfg.get("glyph_seed", "")) if cfg.get("generate_glyphs") else "", '%veritas%': f"Veritas {VERITAS_PROTOCOL_VERSION}", '%seal%': seal_id, '%protocol_status%': "Bridge", '%ots%': self.app.lang.get("ots_pending") if self.config.get("ots_enabled") else "", '%opreturn%': self.app.lang.get("opreturn_ready") if self.config.get("opreturn_enabled") else ""}
         return '\n'.join([self._render_line(cfg.get(f"prompt_line_{i}", ""), now, replacements) for i in range(1, 4) if cfg.get(f"line_{i}_enabled")])
 
-    def _generate_seal_id(self, data: Dict, now: datetime.datetime) -> str:
-        """Generate a unique Veritas Seal ID from block data + timestamp."""
-        raw = f"{data.get('blockheight', '')}{data.get('hash_full', '')}{now.isoformat()}"
-        return f"0x{hashlib.sha256(raw.encode()).hexdigest()[:12]}"
+    def _generate_seal_id(self, data: Dict, now: datetime.datetime = None) -> str:
+        """Generate a deterministic Veritas Seal ID from block data + glyph.
+        
+        Changed in v21.4: Seal is now deterministic (no datetime dependency).
+        Same block + same glyph = same Seal ID (reproducible verification).
+        Ref: THERMODYNAMIC_ALIGNMENT_PAPER_v10_3 §4.1 Epistemic Mass
+        """
+        glyph = self._generate_glyph(self.config.config.get("glyph_seed", ""))
+        tag = self.config.config.get("veritas_epistemic_tag", "")
+        if ve:
+            return ve.generate_deterministic_seal_id(
+                data.get('blockheight', ''),
+                data.get('hash_full', ''),
+                glyph, tag
+            )
+        # Fallback without veritas_engine
+        raw = f"{data.get('blockheight', '')}:{data.get('hash_full', '')}:{glyph}:{tag}"
+        return f"0x{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
     def _render_line(self, template: str, now: datetime.datetime, replacements: Dict) -> str:
         parts = self.special_placeholder_regex.split(template)
@@ -617,8 +651,19 @@ class WidgetWindow:
         self._original_coords = {}
 
     def _calculate_ecm(self) -> int:
+        """Epistemic Confidence Meter — delegated to veritas_engine."""
         data = self.app.data_manager.get_data_snapshot()
-        if not isinstance(data.get("blockheight"), int): return 0
+        has_data = isinstance(data.get("blockheight"), int)
+        if ve:
+            return ve.compute_ecm_confidence(
+                has_data=has_data,
+                use_custom_node=self.config.get("use_custom_node", False),
+                ots_enabled=self.config.get("ots_enabled", False),
+                opreturn_enabled=self.config.get("opreturn_enabled", False),
+            )
+        # Fallback
+        if not has_data:
+            return 0
         score = 50
         if self.config.get("use_custom_node"): score += 20
         if self.config.get("ots_enabled"): score += 15
@@ -673,16 +718,15 @@ class WidgetWindow:
         pulsed_color = f"#{r:02X}{g:02X}{b:02X}"
         
         ecm_val = self._calculate_ecm()
-        if ecm_val >= 85: ecm_base = VERITAS_COLORS["cyan"]
-        elif ecm_val >= 50: ecm_base = VERITAS_COLORS["gold"]
-        else: ecm_base = VERITAS_COLORS["red_alert"]
-        hx_e = ecm_base.lstrip('#')
-        try: re, ge, be = tuple(int(hx_e[i:i+2], 16) for i in (0, 2, 4))
-        except ValueError: re, ge, be = 245, 166, 35
-        re = int(re * (1.0 - self._pulse_phase * darken_factor))
-        ge = int(ge * (1.0 - self._pulse_phase * darken_factor))
-        be = int(be * (1.0 - self._pulse_phase * darken_factor))
-        pulsed_ecm = f"#{re:02X}{ge:02X}{be:02X}"
+        ecm_color_key = ve.ecm_color_key(ecm_val) if ve else ("cyan" if ecm_val >= 85 else "gold" if ecm_val >= 50 else "red_alert")
+        ecm_base = VERITAS_COLORS[ecm_color_key]
+        # B3-FIX: renamed from re,ge,be to r_ecm,g_ecm,b_ecm to avoid shadowing the `re` module
+        r_ecm, g_ecm, b_ecm = ve.parse_hex_color(ecm_base) if ve else (245, 166, 35)
+        if not ve:
+            hx_e = ecm_base.lstrip('#')
+            try: r_ecm, g_ecm, b_ecm = tuple(int(hx_e[i:i+2], 16) for i in (0, 2, 4))
+            except ValueError: pass
+        pulsed_ecm = ve.darken_color(r_ecm, g_ecm, b_ecm, self._pulse_phase, darken_factor) if ve else f"#{int(r_ecm*(1.0-self._pulse_phase*darken_factor)):02X}{int(g_ecm*(1.0-self._pulse_phase*darken_factor)):02X}{int(b_ecm*(1.0-self._pulse_phase*darken_factor)):02X}"
         
         if self.canvas.find_withtag("status_bar"):
             self.canvas.itemconfig("status_bar", fill=pulsed_color, outline=pulsed_color)
@@ -763,9 +807,11 @@ class WidgetWindow:
             self.app.capture_manager.stamp_file(file_path)
 
     def _standalone_opreturn_dialog(self) -> None:
-        import tkinter as tk
-        from tkinter import messagebox
-        import pyperclip
+        # S4-FIX: guard pyperclip import behind dependency check
+        if not _OPTIONAL_DEPENDENCIES.get('pyperclip'):
+            messagebox.showwarning("Missing Dependency", "pyperclip is required for this feature.")
+            return
+        import pyperclip  # Safe: guarded by dependency check above
         
         dlg = tk.Toplevel(self.master)
         dlg.title("Standalone OP_RETURN Payload")
@@ -1062,7 +1108,7 @@ class WidgetWindow:
                 try:
                     with open(temp_psbt_path, 'w', encoding='ascii') as f:
                         f.write(result.get('psbt_b64', ''))
-                    self.app.data_manager.data["latest_psbt_path"] = temp_psbt_path
+                    self.app.data_manager.set_transient("latest_psbt_path", temp_psbt_path)
                 except Exception as e:
                     logging.error(f"Cannot write temp PSBT: {e}")
 
@@ -1071,11 +1117,12 @@ class WidgetWindow:
                       relief='flat', padx=10, pady=5, cursor='hand2').pack(side='left', padx=5)
 
             def _open_psbt():
-                path = self.app.data_manager.data.get("latest_psbt_path")
+                path = self.app.data_manager.get_transient("latest_psbt_path")
                 if not path or not os.path.exists(path):
                     _gen_opreturn_psbt()
-                    path = self.app.data_manager.data.get("latest_psbt_path")
-                if path and os.path.exists(path) and _is_windows():
+                    path = self.app.data_manager.get_transient("latest_psbt_path")
+                # S2-FIX: validate path is a .psbt file before os.startfile
+                if path and os.path.exists(path) and path.endswith('.psbt') and _is_windows():
                     os.startfile(path)
 
             tk.Button(btn_frame, text=self.lang.get("opreturn_open_psbt_btn"), command=_open_psbt,
@@ -1084,10 +1131,10 @@ class WidgetWindow:
 
             if self.config.get("opreturn_use_bitcoin_core"):
                 def _broadcast_psbt():
-                    path = self.app.data_manager.data.get("latest_psbt_path")
+                    path = self.app.data_manager.get_transient("latest_psbt_path")
                     if not path or not os.path.exists(path):
                         _gen_opreturn_psbt()
-                        path = self.app.data_manager.data.get("latest_psbt_path")
+                        path = self.app.data_manager.get_transient("latest_psbt_path")
                     if path and os.path.exists(path):
                         with open(path, 'r', encoding='ascii') as f:
                             b64 = f.read().strip()
@@ -1427,7 +1474,8 @@ class CaptureManager:
             hex_color = self.config.get("outline_color").lstrip('#')
             rgb_shadow = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
             shadow_config['color'] = (*rgb_shadow, opacity)
-        except: pass
+        except (ValueError, TypeError, AttributeError) as e:
+            logging.debug(f"Watermark shadow color parse fallback: {e}")
         main_color = (200, 200, 200, opacity)
 
         # --- LOGIKA RYSOWANIA ---
@@ -2032,7 +2080,7 @@ class CaptureManager:
             logging.info(f"Zapisano PSBT do {psbt_path} i plik informacyjny {txt_path}")
             
             # Store the latest psbt path for UI access if needed
-            self.app.data_manager.data["latest_psbt_path"] = psbt_path
+            self.app.data_manager.set_transient("latest_psbt_path", psbt_path)
             
         except Exception as e:
             logging.error(f"Bład generowania PSBT po capture: {e}")
@@ -2713,6 +2761,59 @@ class SettingsWindow:
             swatch.bind('<Button-1>', lambda e, fn=_pick_bar_color: fn())
 
         # ================= RIGHT COLUMN =================
+
+        # --- Live Protocol Metrics (Paper §4-§7) ---
+        lf_metrics = ttk.LabelFrame(right_col, text="Live Protocol Metrics (§4-§7)")
+        lf_metrics.pack(fill='x', pady=(0, 10))
+
+        data = self.app.data_manager.get_data_snapshot()
+        last_block_time = data.get("last_block_time_local", 0)
+
+        if ve and last_block_time:
+            t_mass = ve.compute_temporal_mass(last_block_time)
+            ecm = ve.compute_ecm_confidence(
+                has_data=isinstance(data.get("blockheight"), int),
+                use_custom_node=self.config.get("use_custom_node", False),
+                ots_enabled=self.config.get("ots_enabled", False),
+                opreturn_enabled=self.config.get("opreturn_enabled", False),
+            )
+            # Simulated VoicePower (no real stake — demo values)
+            demo_stake = 0.01  # researcher tier
+            demo_lock_days = 30
+            vp = ve.compute_voicepower(demo_stake, demo_lock_days)
+            tier = ve.get_fidelity_bond_tier(demo_stake)
+
+            # Simulated Q-Score
+            q = ve.compute_q_score(
+                friction=0.3, stake_btc=demo_stake,
+                temporal_mass=t_mass, has_timechain=True,
+                honesty_posterior=0.85
+            )
+            # Domain Friction Oracle
+            dfo = ve.compute_domain_friction_posterior(slashed=0, accepted=0)
+        else:
+            t_mass, ecm, vp, tier, q, dfo = 0.0, 0, 0.0, "N/A", 0.0, 0.5
+
+        metrics = [
+            ("§4.2 Temporal Mass", f"{t_mass:.4f}", VERITAS_COLORS['cyan']),
+            ("§4.1 ECM Confidence", f"{ecm}%", VERITAS_COLORS['gold'] if ecm < 85 else VERITAS_COLORS['green_ok']),
+            ("§6.1 VoicePower (sim)", f"{vp:.2f}", VERITAS_COLORS['purple']),
+            ("§6.2 Fidelity Bond", f"{tier}", VERITAS_COLORS['gold']),
+            ("§7.6 Q-Score (sim)", f"{q:.4f}", VERITAS_COLORS['cyan']),
+            ("§8 DomainFriction", f"{dfo:.3f}", VERITAS_COLORS['gold']),
+        ]
+        for metric_name, metric_val, metric_color in metrics:
+            mrow = ttk.Frame(lf_metrics)
+            mrow.pack(fill='x', padx=10, pady=1)
+            ttk.Label(mrow, text=metric_name, width=22, anchor='w',
+                      font=('Consolas', 8)).pack(side='left')
+            ttk.Label(mrow, text=metric_val, foreground=metric_color,
+                      font=('Consolas', 9, 'bold')).pack(side='left', padx=5)
+
+        if not ve:
+            ttk.Label(lf_metrics, text="⚠ veritas_engine.py not found — using fallback",
+                      foreground=VERITAS_COLORS['red_alert'], font=('Segoe UI', 8)).pack(padx=10, pady=3)
+
         # --- Veritas Watermark Mode ---
         lf_wm = ttk.LabelFrame(right_col, text=self.lang.get("veritas_watermark_title"))
         lf_wm.pack(fill='x', pady=(0, 10))
@@ -3174,6 +3275,35 @@ if __name__ == "__main__":
         if app and not app._cancel_update.is_set():
             app.close_app()
         sys.exit(0)
+
+# --- CHANGELOG v21.4.0 "Thermodynamic Alignment" ---
+# NEW (v21.4.0):
+#   - veritas_engine.py: New module implementing all formulas from Paper v10.3:
+#     - §4.1 Epistemic Mass with exponential decay
+#     - §4.2 Temporal Mass (Lindy Effect): tanh(ln(1+Δt)/10)
+#     - §5.2 THI XYZW Four-Axis Friction calculation
+#     - §6.1 VoicePower: √S × T² × e^(-γ·Δt_idle)
+#     - §6.2 Fidelity Bond tier classification
+#     - §7.6 Q-Score (Qualia Engine v2.8)
+#     - §8   DomainFrictionOracle Bayesian posterior
+#   - Live Protocol Metrics panel in Veritas Tab (right column)
+#   - Deterministic Seal ID: no longer depends on datetime.now()
+#     Same block + same glyph = reproducible seal (breaking change for seal format)
+#   - ECM calculation delegated to veritas_engine (single source of truth)
+#   - Protocol constants extracted from magic numbers
+# BUGFIXES (v21.4.0):
+#   - B1: Added missing `import struct` (crash in PSBT generation)
+#   - B2: Added missing `import tempfile` (crash in temp file creation)
+#   - B3: Fixed `re, ge, be` variable names shadowing the `re` module
+#         (caused regex failures after pulse loop execution)
+#   - B4+B5: Replaced unsafe `data_manager.data[...]` direct access with
+#            thread-safe `set_transient()`/`get_transient()` methods
+#   - B6: Replaced bare `except: pass` with typed exception handling + logging
+# SECURITY (v21.4.0):
+#   - S2: os.startfile() now validates path ends with '.psbt'
+#   - S4: pyperclip import guarded behind _OPTIONAL_DEPENDENCIES check
+# INHERITED (v21.3.1): See previous changelog below.
+# ---
 
 # --- CHANGELOG v21.3.0 "Veritas Bridge + OTS + OP_RETURN" ---
 # NEW (v21.3.0):
