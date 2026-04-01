@@ -1,24 +1,35 @@
-# Required and optional dependencies for Timechain Desktop Widget v21.0.12
+# Required and optional dependencies for Veritas Timechain Widget v10.3 (Sovereign Edition)
 
 # Mandatory library for image processing
 Pillow>=9.0.0
 
-# Optional libraries for full functionality
-# - For video recording
+# Capture & Video recording
 opencv-python>=4.5.0
-# - For faster screen capturing (especially video/GIF)
 mss>=6.0.0
-# - For numerical operations (used with video/image analysis)
 numpy>=1.20.0
-# - For global hotkey support
+
+# Input and Clipboard
 pynput>=1.7.0
-# - For copying text to clipboard
 pyperclip>=1.8.0
-# - For dynamic QR code generation
+
+# Information retrieval and QR
 qrcode[pil]>=7.0
-# - For fetching data from public blockchain APIs
 requests>=2.25.0
-# - For multi-monitor support
+
+# Hardware awareness
 screeninfo>=0.6.0
-# - For audio feedback (optional feature)
+
+# Audio
 simpleaudio>=1.0.0
+
+# --- Advanced PDF Watermarking & Sealing ---
+pikepdf>=8.0
+reportlab>=3.6.0
+PyPDF2>=2.0.0
+
+# --- Veritas Truth Anchoring (L1/L2) ---
+opentimestamps>=0.4.0
+bitcoinlib>=0.6.0
+
+# --- Drag & Drop (GUI Support) ---
+tkinterdnd2>=0.3.0
