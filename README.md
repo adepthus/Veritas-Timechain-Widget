@@ -114,12 +114,11 @@ TimeChainApp/
 └── THERMODYNAMIC_ALIGNMENT_PAPER_v10_3_1_final.md
 ```
 
-## 📖 Szybki Schemat Pracy (Quick Workflow)
+## 🛠️ The Architect’s Manual – Operational Directives
 
-1. **Secure Your Environment:** Launch the widget. The hovering, borderless monitor locks onto the pulse of the network blocks (Veritas Truth Pulse). ECM shows current anchoring strength.
-2. **Define Your Stamp:** Right-click → *Settings → Template & Appearance*. Supply your unique `Glyph Seed` and arrange the watermark text structure (e.g., `%blockheight% - %glyph%`).
-3. **Seal on the Fly:** Hit the global machine shortcut `Ctrl+Shift+1` or `Ctrl+Alt+1`. A rapid freeze frame, a green notification flash, and your proof lands securely in the capture folder paired with an OTS cryptographic ticket.
-4. **Mass Directives:** Fling an entire document tree or PDF contract directly onto the Widget UI footprint. An express batch process engages, producing a compressed pack of cryptographic-ready PDFs carrying internal metadata payload proofs. Your data and research files become untouchable.
+For a complete, immersive guide on how to operate the Timechain Widget (initialization, identity forging, single staking, and batch operations), please refer to the official operation manual:
+
+👉 **[Read The Architect's Manual (English & Polish)](timechain_app_manual.md)**
 
 ---
 
