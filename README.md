@@ -221,10 +221,10 @@ If you need a reproducible reference to a specific state, use the full commit SH
 
 ## Prior Art
 
-Bitcoin Timechain · **Block 942729** · `2026-03-29 04:41 UTC`  
-Veritas Seal ID: `0x2e06272db84b`  
-Block hash: `0000000000000000000020f31057768f98f49fabf091f45640125c51f9a7ce59`  
-[Verify on mempool.space ↗](https://mempool.space/block/000000000000000000020f31057768f98f49fabf091f45640125c51f9a7ce59)
+Bitcoin Timechain · **Block 943130** · `2026-04-01 02:10 UTC`  
+Veritas Seal ID: `0x768dbecebe5c`  
+Block hash: `00000000000000000001696e6a88738ef7a1a32d2afeba11d54d2b2e3f683028`  
+[Verify on mempool.space ↗](https://mempool.space/block/00000000000000000001696e6a88738ef7a1a32d2afeba11d54d2b2e3f683028)
 
 This anchor was produced by an earlier version of this widget. It timestamps the Veritas Protocol theoretical architecture prior to any external publication.
 
@@ -445,10 +445,10 @@ Liczby te są odczytywane z kodu źródłowego, nie z materiałów marketingowyc
 
 ## Prior Art
 
-Bitcoin Timechain · **Blok 942729** · `2026-03-29 04:41 UTC`  
-Veritas Seal ID: `0x2e06272db84b`  
-Hash bloku: `0000000000000000000020f31057768f98f49fabf091f45640125c51f9a7ce59`  
-[Zweryfikuj na mempool.space ↗](https://mempool.space/block/000000000000000000020f31057768f98f49fabf091f45640125c51f9a7ce59)
+Bitcoin Timechain · **Block 943130** · `2026-04-01 02:10 UTC`  
+Veritas Seal ID: `0x768dbecebe5c`  
+Block hash: `00000000000000000001696e6a88738ef7a1a32d2afeba11d54d2b2e3f683028`  
+[Zweryfikuj on mempool.space ↗](https://mempool.space/block/00000000000000000001696e6a88738ef7a1a32d2afeba11d54d2b2e3f683028)
 
 ---
 
