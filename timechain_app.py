@@ -815,7 +815,7 @@ class WidgetWindow:
         
         dlg = tk.Toplevel(self.master)
         dlg.title("Standalone OP_RETURN Payload")
-        dlg.geometry("450x220")
+        dlg.geometry("450x260")
         dlg.attributes("-topmost", True)
         dlg.configure(bg="#1A2332")
         
@@ -844,7 +844,8 @@ class WidgetWindow:
                 dlg.destroy()
                 self.flash("cyan")
                 
-        tk.Button(dlg, text="Generuj Raw PSBT", command=_generate, bg="#00D4FF", fg="#1A2332", font=("Segoe UI", 9, "bold"), cursor="hand2").pack(pady=15)
+        tk.Button(dlg, text="Generuj Raw PSBT", command=_generate, bg="#00D4FF", fg="#1A2332", font=("Segoe UI", 9, "bold"), cursor="hand2").pack(pady=(15, 5))
+        tk.Label(dlg, text="Uwaga: Raw PSBT is an unsigned template.\nMust be funded via wallet coin-control before signing.", bg="#1A2332", fg="#FF5555", font=("Segoe UI", 8)).pack(pady=(0, 10))
 
     def _pdf_settings_dialog(self) -> None:
         import tkinter as tk
@@ -1600,7 +1601,7 @@ class CaptureManager:
             path = os.path.normpath(path)
 
             if not os.path.exists(path):
-                logging.error(f"Nieprawidlowy plik/folder: {path}")
+                logging.error(f"Nieprawidłowy plik/folder: {path}")
                 return
 
             if os.path.isdir(path):
@@ -1625,11 +1626,11 @@ class CaptureManager:
             elif ext == '.pdf':
                 self.app.master.after(0, lambda p=[path]: self.app.ui_manager.show_pdf_seal_configurator(p, []))
             else:
-                self.app.master.after(0, lambda: messagebox.showwarning("Nieobsugiwany format", f"Otrzymano: {ext}"))
+                self.app.master.after(0, lambda: messagebox.showwarning("Nieobsługiwany format", f"Otrzymano: {ext}"))
                 return
 
         except Exception as e:
-            logging.error(f"Blad routingu pliku: {e}")
+            logging.error(f"Błąd routingu pliku: {e}")
 
     def _confirm_batch_directory(self, pdfs: list, images: list):
         total = len(pdfs) + len(images)
@@ -1680,8 +1681,9 @@ class CaptureManager:
             if not batch_mode:
                 self.app.master.after(0, lambda: self.ui_manager.flash_widget("green"))
         except Exception as e:
-            logging.error(f"Bad stemplowania obrazu: {e}")
+            logging.error(f"Błąd stemplowania obrazu: {e}")
             if not batch_mode:
+                self.app.master.after(0, lambda e=e: messagebox.showerror("Błąd", f"Nie udało się ostemplować obrazu:\n{e}"))
                 self.app.master.after(0, lambda: self.ui_manager.flash_widget("red"))
 
     def _stamp_pdf(self, pdf_path: str, preset: str = "bottom-center", batch_mode: bool = False):
@@ -1814,22 +1816,22 @@ class CaptureManager:
                 self.app.master.after(0, lambda: self.app.ui_manager.progress_manager.close())
             self._post_stamp_actions(stamped_path, pdf_path)
             if not batch_mode:
-                self.app.master.after(0, lambda: messagebox.showinfo("PDF stamped", f"Zapieczetowano (widok pelnoekranowy):\n{stamped_path}"))
+                self.app.master.after(0, lambda: messagebox.showinfo("PDF stamped", f"Zapieczętowano (widok pełnoekranowy):\n{stamped_path}"))
                 self.app.master.after(0, lambda: self.ui_manager.flash_widget("green"))
 
         except pikepdf.PasswordError:
             if not batch_mode:
                 self.app.master.after(0, lambda: self.app.ui_manager.progress_manager.close())
-            logging.error(f"PDF chroniony haslem: {pdf_path}")
+            logging.error(f"PDF chroniony hasłem: {pdf_path}")
             if not batch_mode:
-                self.app.master.after(0, lambda: messagebox.showerror("Blad PDF", "PDF jest chroniony haslem - odblokuj go recznie przed ostemplowaniem."))
+                self.app.master.after(0, lambda: messagebox.showerror("Błąd PDF", "PDF jest chroniony hasłem - odblokuj go ręcznie przed ostemplowaniem."))
                 self.app.master.after(0, lambda: self.ui_manager.flash_widget("red"))
         except Exception as e:
             if not batch_mode:
                 self.app.master.after(0, lambda: self.app.ui_manager.progress_manager.close())
             logging.error(f"PDF stamping error: {e}")
             if not batch_mode:
-                self.app.master.after(0, lambda: messagebox.showerror("Blad PDF", str(e)))
+                self.app.master.after(0, lambda e=e: messagebox.showerror("Błąd PDF", str(e)))
                 self.app.master.after(0, lambda: self.ui_manager.flash_widget("red"))
 
     def _post_stamp_actions(self, stamped_path: str, original_path: str):
@@ -2042,7 +2044,7 @@ class CaptureManager:
             result.update({"psbt_b64": psbt_b64, "fee_sat": fee_sat, "txid_expected": txid})
             logging.info(f"Wygenerowano PSBT (manual wrapper): fee={fee_sat} sat")
         except Exception as e:
-            logging.error(f"Bład generowania PSBT: {e}")
+            logging.error(f"Błąd generowania PSBT: {e}")
         return result
 
     def _generate_opreturn_if_enabled(self, file_path: str) -> None:
@@ -2083,7 +2085,7 @@ class CaptureManager:
             self.app.data_manager.set_transient("latest_psbt_path", psbt_path)
             
         except Exception as e:
-            logging.error(f"Bład generowania PSBT po capture: {e}")
+            logging.error(f"Błąd generowania PSBT po capture: {e}")
 
     def _broadcast_via_core(self, psbt_b64: str) -> bool:
         """Broadcast PSBT via Bitcoin Core RPC (walletprocesspsbt -> finalizepsbt -> sendrawtransaction)."""
@@ -2126,7 +2128,7 @@ class CaptureManager:
                 logging.info(f"PSBT broadcast OK: {res3}")
                 return True
         except Exception as e:
-            logging.error(f"Bład broadcastu PSBT (via Core): {e}")
+            logging.error(f"Błąd broadcastu PSBT (via Core): {e}")
         return False
 
 class SettingsWindow:

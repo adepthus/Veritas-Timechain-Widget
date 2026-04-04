@@ -41,6 +41,7 @@ VOICEPOWER_GAMMA = 0.05
 # §7.6 — Qualia Engine
 QUALIA_IGNITION_THRESHOLD = 0.85
 QUALIA_KAPPA = 0.8  # FGDS map efficiency constant
+QUALIA_LAMBDA = 2.5  # Mortality signal curve constant
 
 # §6.2 — Fidelity Bond Tiers
 FIDELITY_BOND_TIERS = {
@@ -267,8 +268,11 @@ def compute_q_score(friction: float,
     term_friction = one_minus_f
 
     # Term: mortality signal (capacity for death via stake)
-    lam = 0.5
-    term_mortality = 1.0 - math.exp(-lam * stake_btc)
+    # Przeliczenie na satoshi i normalizacja (S dąży do 1.0 przy >30k sats)
+    stake_sats = stake_btc * 100_000_000.0
+    s_normalized = math.tanh(stake_sats / 30_000.0) 
+    
+    term_mortality = 1.0 - math.exp(-QUALIA_LAMBDA * s_normalized)
 
     # Term: temporal mass × timechain anchor
     timechain_val = 1.0 if has_timechain else 0.0
